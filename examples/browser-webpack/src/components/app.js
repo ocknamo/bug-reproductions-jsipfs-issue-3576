@@ -4,8 +4,11 @@ const React = require('react')
 const IPFS = require('ipfs')
 const uint8ArrayConcat = require('uint8arrays/concat')
 const uint8ArrayToString = require('uint8arrays/to-string')
+const fileContentToDataUri = require('./utils/convert')
 
 const stringToUse = 'hello world from webpacked IPFS'
+
+let node = null;
 
 class App extends React.Component {
   constructor (props) {
@@ -15,7 +18,7 @@ class App extends React.Component {
       agentVersion: null,
       protocolVersion: null,
       addedFileHash: null,
-      addedFileContents: null
+      addedFileContents: null,
     }
   }
 
@@ -24,7 +27,7 @@ class App extends React.Component {
   }
 
   async ops () {
-    const node = await IPFS.create({ repo: String(Math.random() + Date.now()) })
+    node = await IPFS.create({ repo: String(Math.random() + Date.now()) })
 
     console.log('IPFS node is ready')
 
@@ -45,6 +48,40 @@ class App extends React.Component {
     this.setState({ addedFileContents: uint8ArrayToString(data) })
   }
 
+  async handleChangeFile(e) {
+    const target = e.target;
+    const file = target.files.item(0);
+    console.log('LOG :>> ', file.name);
+
+
+    // regular API
+    // const { cid } = await node.add(file);
+
+    // MFS API
+    const path = `/${file.name}`;
+    await node.files.write(path, file, { create: true });
+    const { cid } = await node.files.stat(path);
+
+    console.log('cid :>> ', String(cid));
+    this.setState({ addedFileHash: cid.toString() });
+
+    // Get file from IPFS
+    const files = await node.get(cid, { timeout: 10000 });
+    // Create dataUri
+    let dataUri = ''
+    for await (const file of files) {
+      dataUri = await fileContentToDataUri(file.content);
+    }
+
+    // Downloag file
+    const a = document.createElement('a');
+    document.body.appendChild(a);
+    a.setAttribute('style', 'display: none');
+    a.href = dataUri;
+    a.download = 'test.jpg';
+    a.click();
+  }
+
   render () {
     return (
       <div style={{ textAlign: 'center' }}>
@@ -63,6 +100,7 @@ class App extends React.Component {
           Contents of this file: <br />
           {this.state.addedFileContents}
         </p>
+        <input id="file" type="file" onChange={(e) => this.handleChangeFile(e)}/>
       </div>
     )
   }
